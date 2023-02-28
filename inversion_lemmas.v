@@ -1,6 +1,5 @@
 From mathcomp Require Import ssreflect.
-From Coq Require Import Program.Equality NArith ZArith_base.
-From Coq Require Import List.
+From Coq Require Import Program.Equality NArith ZArith_base List Extraction.
 Import ListNotations.
 
 Notation " P ** Q " := (prod P Q) (at level 95, right associativity).
@@ -9,7 +8,6 @@ Inductive term : Set :=
   | term_i32
   | term_f32
   | term_addi32
-  | term_addf32
   | term_SEQ: term -> term -> term
 .
 
@@ -26,7 +24,6 @@ Inductive typing : term -> function_type -> Prop :=
   | typing_term_i32 : typing term_i32 (Tf [] [t_i32])
   | typing_term_f32 : typing term_f32 (Tf [] [t_f32])
   | typing_term_addi32 : typing term_addi32 (Tf [t_i32; t_i32] [t_i32])
-  | typing_term_addf32 : typing term_addf32 (Tf [t_f32; t_f32] [t_f32])
   | typing_weaken : forall t t1s t2s ts,
       typing t (Tf t1s t2s) -> typing t (Tf (ts ++ t1s) (ts ++ t2s))
   | typing_composition : forall t1 t2 t1s t2s t3s,
@@ -43,6 +40,7 @@ Lemma value_type_list_eq_dec : forall l1 l2 : list value_type,
   {l1 = l2} + {l1 <> l2}.
 Proof. apply List.list_eq_dec. apply value_type_eq_dec. Qed.
 
+(* Typing inversion lemmas *)
 Lemma term_i32_typing_inv : forall t t1s t2s,
   t = term_i32 ->
   typing t (Tf t1s t2s) ->
@@ -69,7 +67,20 @@ Proof.
   by apply IHHtype.
 Qed.
 
-Check skipn.
+(* XXX do these need sigma types or is exists fine?
+ * since we don't want to have them at runtime anyway *)
+(* TODO might need to use the type checker for this one too? *)
+Lemma term_addi32_typing_inv : forall t t1s t2s,
+  t = term_addi32 ->
+  typing t (Tf t1s t2s) ->
+  exists ts, t1s = ts ++ [t_i32; t_i32] ** t2s = ts ++ [t_i32].
+Proof.
+  intros t t1s t2s Hterm Htype.
+  subst t.
+  exists (removelast t2s); split.
+Admitted.
+
+(* We beed a type checker for the remaining lemmas *)
 
 Definition type_checker_seq (t1 t2: term) (tf1 tf2: function_type): function_type :=
   (* TODO need to actually verify the types after the first n types
@@ -119,7 +130,6 @@ Fixpoint type_checker (t: term): function_type :=
   | term_i32 => Tf [] [t_i32]
   | term_f32 => Tf [] [t_f32]
   | term_addi32 => Tf [t_i32; t_i32] [t_i32]
-  | term_addf32 => Tf [t_f32; t_f32] [t_f32]
   | term_SEQ t1 t2 =>
       type_checker_seq t1 t2 (type_checker t1) (type_checker t2)
   end.
@@ -147,3 +157,25 @@ Lemma term_SEQ_typing_inv : forall t t1 t2 t1s t2s,
   {t3s & typing t1 (Tf t1s t3s) /\ typing t2 (Tf t3s t2s)}.
 Proof.
 Admitted.
+
+(* Note: the program given to the interpreter must take no input
+ * XXX should change it to instead pass around the stack of values *)
+Definition interpret_one_step t tf_out (Htype : typing t (Tf [] tf_out)) : term.
+Proof.
+  destruct t as [| | |t1 t2] eqn:teq.
+  (* term_i32 *)
+  - apply term_i32.
+  (* term_f32 *)
+  - apply term_f32.
+  (* term_addi32
+   * binop with no values available - violates Htype *)
+  - exfalso.
+    apply term_addi32_typing_inv in Htype as [ts [Hts _]] => //.
+    destruct ts; by inversion Hts.
+  (* term_SEQ *)
+  - apply (term_SEQ_typing_inv (term_SEQ t1 t2) _ _ _ _ eq_refl) in Htype
+    as [ts [Htype1 Htype2]].
+    apply t. (* TODO just doing identity for now *)
+Defined.
+
+Recursive Extraction interpret_one_step.
