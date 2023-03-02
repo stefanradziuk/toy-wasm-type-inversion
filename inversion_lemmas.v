@@ -72,7 +72,7 @@ Lemma value_typing_inversion_i32 : forall v,
 Proof.
   intros v Hvtype. apply value_typing_inversion in Hvtype.
   destruct v; inversion Hvtype. exists n. reflexivity.
-Qed.
+Defined.
 
 Lemma value_typing_inversion_f32 : forall v,
   value_typing v t_f32 -> {f & v = val_f32 f}.
@@ -108,15 +108,40 @@ Proof.
     by apply (IHHtype _ _ _ Hvtype); reflexivity.
 Qed.
 
-(* TODO might need to use the type checker for this one too? *)
-Lemma term_addi32_typing_inv : forall t t1s t2s,
-  t = term_addi32 ->
-  typing t (Tf t1s t2s) ->
+Lemma term_addi32_typing_inv_nonempty : forall t1s t2s,
+  typing term_addi32 (Tf t1s t2s) -> t2s <> [].
+Proof.
+  intros t1s' t2s' Htype'.
+  dependent induction Htype'.
+  - discriminate.
+  - intros Hcontr. apply app_eq_nil in Hcontr as [_ Hcontr].
+    apply IHHtype' with (t1s' := t1s) in Hcontr; try assumption; reflexivity.
+Qed.
+
+(* NOTE: had to do induction over Htype BEFORE splitting,
+ * otherwise IH was useless *)
+Lemma term_addi32_typing_inv : forall t1s t2s,
+  typing term_addi32 (Tf t1s t2s) ->
   {ts & t1s = ts ++ [t_i32; t_i32] /\ t2s = ts ++ [t_i32]}.
 Proof.
-  intros t t1s t2s Hterm Htype.
-  subst t. exists (removelast t2s); split.
-Admitted.
+  intros t1s t2s Htype. exists (removelast t2s).
+  dependent induction Htype => //.
+  assert (IHHtype' :
+    t1s0 = removelast t2s0 ++ [t_i32; t_i32] /\
+    t2s0 = removelast t2s0 ++ [t_i32]
+  ).
+  { apply IHHtype with (t1s := t1s0); by reflexivity. }
+  induction ts => //.
+  assert (Ht2s0 : t2s0 <> []).
+  { by apply (term_addi32_typing_inv_nonempty _ _ Htype). }
+  assert (Hassoc : removelast ((a :: ts) ++ t2s0) = removelast ([a] ++ ts ++ t2s0)) => //.
+  rewrite Hassoc. rewrite removelast_app. simpl.
+  destruct IHts as [IHts1 IHts2].
+  split; apply f_equal; by assumption.
+  intros Hcontr.
+  apply app_eq_nil in Hcontr as [_ Hcontr].
+  apply Ht2s0 => //.
+Defined.
 
 (* We beed a type checker for the remaining lemmas *)
 
@@ -222,7 +247,7 @@ Proof.
     apply (t, s).
   - (* term_addi32 *)
     (* use Hstype to discover that the stack has at least two values on it *)
-    apply (term_addi32_typing_inv) in Htype as [ts [Hts1 Hts2]]; last by reflexivity.
+    apply (term_addi32_typing_inv) in Htype as [ts [Hts1 Hts2]].
     subst tf_in.
     assert (Hlist : ts ++ [t_i32; t_i32] = (ts ++ [t_i32]) ++ [t_i32]).
     { rewrite <- app_assoc. by reflexivity. }
@@ -243,5 +268,27 @@ Proof.
     as [ts [Htype1 Htype2]].
     apply (t, s). (* TODO just doing identity for now *)
 Defined.
+
+(* Testing the interpreter *)
+
+Definition stack_2_6 : stack := [val_i32 2; val_i32 6].
+
+Lemma stack_2_6_typing : stack_typing stack_2_6 [t_i32; t_i32].
+Proof.
+  repeat apply stack_typing_cons; try apply vt.
+  by apply stack_typing_nil.
+Qed.
+
+Compute (
+  interpret_one_step
+  term_addi32
+  [t_i32; t_i32]
+  [t_i32]
+  stack_2_6
+  typing_term_addi32
+  stack_2_6_typing
+).
+
+(* Extraction *)
 
 Recursive Extraction interpret_one_step.
