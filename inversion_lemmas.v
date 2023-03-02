@@ -1,8 +1,13 @@
 From mathcomp Require Import ssreflect.
-From Coq Require Import Program.Equality NArith ZArith_base List Extraction.
+From Coq Require Import Program.Equality NArith ZArith_base List Extraction Floats.
 Import ListNotations.
 
 Notation " P ** Q " := (prod P Q) (at level 95, right associativity).
+
+Inductive value : Set :=
+  | val_i32 : nat -> value
+  | val_f32 : float -> value
+.
 
 Inductive term : Set :=
   | term_i32
@@ -18,6 +23,16 @@ Inductive value_type : Type :=
 
 Inductive function_type : Type :=
   | Tf (t1s : list value_type) (t2s : list value_type)
+.
+
+Definition typeof (v : value) : value_type :=
+  match v with
+  | val_i32 _ => t_i32
+  | val_f32 _ => t_f32
+  end.
+
+Inductive value_typing : value -> value_type -> Prop :=
+  | vt : forall v, value_typing v (typeof v)
 .
 
 Inductive typing : term -> function_type -> Prop :=
@@ -39,6 +54,15 @@ Proof. decide equality. Qed.
 Lemma value_type_list_eq_dec : forall l1 l2 : list value_type,
   {l1 = l2} + {l1 <> l2}.
 Proof. apply List.list_eq_dec. apply value_type_eq_dec. Qed.
+
+(* Value typing inversion lemmas *)
+Lemma val_i32_typing_inv : forall v n vt,
+  v = val_i32 n -> value_typing v vt -> vt = t_i32.
+Proof. intros v n vt Heqv Hvtype. inversion Hvtype. subst. reflexivity. Qed.
+
+Lemma val_f32_typing_inv : forall v n vt,
+  v = val_f32 n -> value_typing v vt -> vt = t_f32.
+Proof. intros v n vt Heqv Hvtype. inversion Hvtype. subst. reflexivity. Qed.
 
 (* Typing inversion lemmas *)
 Lemma term_i32_typing_inv : forall t t1s t2s,
