@@ -24,9 +24,14 @@ Inductive function_type : Type :=
   | Tf (t1s : list value_type) (t2s : list value_type)
 .
 
+Definition typeof (v : value) : value_type :=
+  match v with
+  | val_i32 _ => t_i32
+  | val_f32 _ => t_f32
+  end.
+
 Inductive value_typing : value -> value_type -> Prop :=
-  | val_typing_i32: forall n, value_typing (val_i32 n) t_i32
-  | val_typing_f32: forall n, value_typing (val_f32 n) t_f32
+  | vt: forall v, value_typing v (typeof v)
 .
 
 Inductive typing : term -> function_type -> Prop :=
@@ -58,7 +63,25 @@ Proof.
 Qed.
 
 (* Typing inversion lemmas *)
-(* XXX how to do this as sigma type? *)
+Lemma value_typing_inversion : forall v vt,
+  value_typing v vt -> vt = typeof v.
+Proof. intros v vt Hvtype. inversion Hvtype. reflexivity. Qed.
+
+Lemma value_typing_inversion_i32 : forall v,
+  value_typing v t_i32 -> {n & v = val_i32 n}.
+Proof.
+  intros v Hvtype. apply value_typing_inversion in Hvtype.
+  destruct v; inversion Hvtype. exists n. reflexivity.
+Qed.
+
+Lemma value_typing_inversion_f32 : forall v,
+  value_typing v t_f32 -> {f & v = val_f32 f}.
+Proof.
+  intros v Hvtype. apply value_typing_inversion in Hvtype.
+  destruct v; inversion Hvtype. exists f. reflexivity.
+Qed.
+
+(* XXX is this not provable as sigma type?
 Lemma value_typing_inversion_i32 : forall v,
   value_typing v t_i32 -> {n & v = val_i32 n}.
 Proof.
@@ -66,7 +89,7 @@ Proof.
   destruct v as [n|].
   - exists n. reflexivity.
   - Fail induction Hvtype.
-Admitted. (* TODO *)
+Admitted. *)
 
 Lemma term_const_typing_inv : forall t v vt t1s t2s,
   t = (term_const v) ->
