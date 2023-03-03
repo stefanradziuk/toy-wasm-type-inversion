@@ -202,7 +202,6 @@ Definition stack := list value.
 
 Inductive stack_typing : stack -> list value_type -> Prop :=
   | stack_typing_nil : stack_typing [] []
-  (* TODO stack type / naming *)
   | stack_typing_cons : forall s st t vt,
       stack_typing s st ->
       value_typing t vt ->
@@ -225,10 +224,30 @@ Proof.
   induction s.
 Admitted.
 
+Lemma stack_typing_length : forall s st,
+  stack_typing s st -> length s = length st.
+Proof.
+  intros s st Hstype.
+  induction Hstype => //.
+  simpl. rewrite IHHstype. reflexivity.
+Qed.
+
 Lemma rcons_stack_typing_inv' : forall s st vt,
   stack_typing s (st ++ [vt]) ->
   {s' & {t & s = s' ++ [t] /\ stack_typing s' st /\ value_typing t vt}}.
-Proof. (* TODO *) Admitted.
+Proof.
+  intros s st vt Hstype.
+  assert (Hlens : length s = length (st ++ [vt])).
+  { apply (stack_typing_length _ _ Hstype). }
+  assert (Hlenst : length (st ++ [vt]) = length st + 1).
+  { rewrite app_length. reflexivity. }
+  rewrite Hlenst in Hlens.
+  induction st. (* TODO rcons induction instead? *)
+  - destruct s; try by inversion Hlens.
+    simpl in Hlens. inversion Hlens.
+
+
+Admitted.
 
 Lemma cat_stack_typing_inv : forall s st1 st2,
   stack_typing s (st1 ++ st2) ->
