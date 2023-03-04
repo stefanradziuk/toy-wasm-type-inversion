@@ -1,5 +1,5 @@
 From mathcomp Require Import ssreflect.
-From Coq Require Import Program.Equality NArith ZArith_base List Extraction Floats.
+From Coq Require Import Program.Equality NArith ZArith_base List Floats.
 Import ListNotations.
 
 Notation " P ** Q " := (prod P Q) (at level 95, right associativity).
@@ -45,6 +45,38 @@ Inductive typing : term -> function_type -> Prop :=
       typing t2 (Tf t3s t2s) ->
       typing (term_SEQ t1 t2) (Tf t1s t2s)
 .
+
+(* append induction on lists
+ * the stdlib version uses Prop instead of Type *)
+Lemma rev_list_ind_T :
+  forall (A : Type) (P : list A -> Type),
+  P [] ->
+  (forall (a : A) (l : list A), P (rev l) -> P (rev (a :: l))) ->
+  forall (l : list A), P (rev l).
+Proof.
+  intros A P Hemp Happ l.
+  induction l as [|?? IHl].
+  - apply Hemp.
+  - apply Happ. apply IHl.
+Qed.
+
+Theorem rev_ind_T :
+  forall (A : Type) (P : list A -> Type),
+  P [] ->
+  (forall (x : A) (l : list A), P l -> P (l ++ [x])) ->
+  forall (l : list A), P l.
+Proof.
+  intros A P Hemp Happ l.
+  induction l.
+  - by apply Hemp.
+  - assert (Hrev : a :: l = (rev (rev l ++ [a]))).
+    { rewrite rev_unit. rewrite rev_involutive. by reflexivity. }
+    rewrite Hrev.
+    apply rev_list_ind_T.
+    * by apply Hemp.
+    * intros a' l' Hrevl'.
+      simpl. apply Happ. by apply Hrevl'.
+Qed.
 
 (* Equality decidability lemmas *)
 Lemma value_type_eq_dec : forall t1 t2 : value_type,
@@ -222,6 +254,7 @@ Lemma rcons_stack_typing_inv : forall s st t vt,
 Proof.
   intros s st t tt Hstype.
   induction s.
+  (* TODO this is admitted but is not used for extraction *)
 Admitted.
 
 Lemma stack_typing_length : forall s st,
@@ -237,18 +270,19 @@ Lemma rcons_stack_typing_inv' : forall s st vt,
   {s' & {t & s = s' ++ [t] /\ stack_typing s' st /\ value_typing t vt}}.
 Proof.
   intros s st vt Hstype.
+  (* XXX did Hlens / Hlenst end up necessary? *)
   assert (Hlens : length s = length (st ++ [vt])).
   { apply (stack_typing_length _ _ Hstype). }
   assert (Hlenst : length (st ++ [vt]) = length st + 1).
   { rewrite app_length. reflexivity. }
   rewrite Hlenst in Hlens.
-  induction st. (* TODO rcons induction instead? *)
-  - destruct s; try by inversion Hlens.
-    simpl in Hlens. inversion Hlens.
+  induction s as [|t s'] using rev_ind_T.
+  - exfalso. rewrite plus_comm in Hlens. by discriminate Hlens.
+  - exists s', t. apply rcons_stack_typing_inv in Hstype as [Hstype Hvtype].
+    repeat split; by assumption.
+Qed.
 
-
-Admitted.
-
+(* XXX no longer necessary? *)
 Lemma cat_stack_typing_inv : forall s st1 st2,
   stack_typing s (st1 ++ st2) ->
   {s1 & {s2 & s = s1 ++ s2 /\ stack_typing s1 st1 /\ stack_typing s2 st2}}.
@@ -262,8 +296,10 @@ Definition interpret_one_step
   : (term * stack).
 Proof.
   destruct t as [| |t1 t2] eqn:teq.
+
   - (* term_const *)
     apply (t, s).
+
   - (* term_addi32 *)
     (* use Hstype to discover that the stack has at least two values on it *)
     apply (term_addi32_typing_inv) in Htype as [ts [Hts1 Hts2]].
@@ -291,8 +327,10 @@ Defined.
 (* Testing the interpreter *)
 
 Definition stack_2_6 : stack := [val_i32 2; val_i32 6].
+Definition t_in : list value_type := [t_i32; t_i32].
+Definition t_out : list value_type := [t_i32].
 
-Lemma stack_2_6_typing : stack_typing stack_2_6 [t_i32; t_i32].
+Lemma stack_2_6_typing : stack_typing stack_2_6 t_in.
 Proof.
   repeat apply stack_typing_cons; try apply vt.
   by apply stack_typing_nil.
@@ -301,8 +339,8 @@ Qed.
 Compute (
   interpret_one_step
   term_addi32
-  [t_i32; t_i32]
-  [t_i32]
+  t_in
+  t_out
   stack_2_6
   typing_term_addi32
   stack_2_6_typing
@@ -310,4 +348,14 @@ Compute (
 
 (* Extraction *)
 
-Recursive Extraction interpret_one_step.
+From Coq Require Import Extraction.
+Extraction Language Haskell.
+Extraction "interpret.hs"
+  interpret_one_step
+  term_addi32
+  t_in
+  t_out
+  stack_2_6
+  typing_term_addi32
+  stack_2_6_typing
+.
