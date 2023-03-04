@@ -242,6 +242,10 @@ Lemma term_SEQ_typing_inv : forall t t1 t2 t1s t2s,
   typing t (Tf t1s t2s) ->
   {t3s & typing t1 (Tf t1s t3s) /\ typing t2 (Tf t3s t2s)}.
 Proof.
+  intros t t1 t2 t1s t2s Heqt Htype.
+  destruct (type_checker t1) as [t1s' t3s'].
+  destruct (type_checker t2) as [t2s' t3s''].
+  (* XXX need type checker correctness proof here *)
 Admitted.
 
 (* The value stack *)
