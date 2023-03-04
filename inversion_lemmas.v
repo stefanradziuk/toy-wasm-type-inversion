@@ -123,6 +123,7 @@ Proof.
   - Fail induction Hvtype.
 Admitted. *)
 
+(* XXX unused now?
 Lemma term_const_typing_inv : forall t v vt t1s t2s,
   t = (term_const v) ->
   value_typing v vt ->
@@ -138,6 +139,20 @@ Proof.
     rewrite Heqvt. reflexivity.
   - rewrite <- app_assoc; f_equal.
     by apply (IHHtype _ _ _ Hvtype); reflexivity.
+Qed. *)
+
+Lemma term_const_typing_inv : forall t v t1s t2s,
+  t = (term_const v) ->
+  typing t (Tf t1s t2s) ->
+  {ts & t1s = ts /\ t2s = ts ++ [typeof v]}.
+Proof.
+  intros t v t1s t2s Hterm Htype. subst t.
+  exists t1s; split => //.
+  dependent induction Htype.
+  - assert (Heqvt : vt0 = typeof v). { by apply value_typing_inversion. }
+    rewrite Heqvt. by reflexivity.
+  - rewrite <- app_assoc; f_equal.
+    by apply IHHtype; reflexivity.
 Qed.
 
 Lemma term_addi32_typing_inv_nonempty : forall t1s t2s,
@@ -249,10 +264,10 @@ Lemma cons_stack_typing_inv : forall s st t vt,
 Proof. intros s st t tt Hstype. inversion Hstype; auto. Qed.
 
 Lemma rcons_stack_typing_inv : forall s st t vt,
-  stack_typing (s ++ [t]) (st ++ [vt]) ->
+  stack_typing (s ++ [t]) (st ++ [vt]) <->
   stack_typing s st /\ value_typing t vt.
 Proof.
-  intros s st t tt Hstype.
+  intros s st t tt.
   induction s.
   (* TODO this is admitted but is not used for extraction *)
 Admitted.
@@ -290,15 +305,22 @@ Proof. Admitted.
 
 (* Note: the stack given to the interpreter
  * must contain the right type values *)
-Definition interpret_one_step
+Fixpoint interpret_one_step
   t tf_in tf_out s
   (Htype : typing t (Tf tf_in tf_out)) (Hstype : stack_typing s tf_in)
-  : (term * stack).
+  : {t' : term & {s' : stack & stack_typing s' tf_out}}.
 Proof.
-  destruct t as [| |t1 t2] eqn:teq.
+  destruct t as [| |t1 t2] eqn:Heqt.
 
   - (* term_const *)
-    apply (t, s).
+    (* TODO need to consume evaluated instrs - noop instr? *)
+    exists t, (s ++ [v]).
+    rewrite <- Heqt in Htype.
+    destruct (term_const_typing_inv t v tf_in tf_out Heqt Htype) as [tf_in' [? Htf_out]].
+    subst tf_in'. rewrite Htf_out.
+    apply rcons_stack_typing_inv. split.
+    * by assumption.
+    * by apply vt.
 
   - (* term_addi32 *)
     (* use Hstype to discover that the stack has at least two values on it *)
@@ -316,12 +338,21 @@ Proof.
     (* now deduce t1 and t2 are both (term_const (val_i32 _)) *)
     apply value_typing_inversion_i32 in Hvtype1 as [n1].
     apply value_typing_inversion_i32 in Hvtype2 as [n2].
-    apply (term_const (val_i32 (n1 + n2)), s'').
+    exists t, (s'' ++ [val_i32 (n1 + n2)]). subst.
+
+    apply rcons_stack_typing_inv. split.
+    * by assumption.
+    * by apply vt.
 
   - (* term_SEQ *)
     apply (term_SEQ_typing_inv (term_SEQ t1 t2) _ _ _ _ eq_refl) in Htype
     as [ts [Htype1 Htype2]].
-    apply (t, s). (* TODO just doing identity for now *)
+
+    destruct (interpret_one_step _ _ _ s Htype1 Hstype) as [t1' [s' Hstype']].
+    destruct (interpret_one_step _ _ _ s' Htype2 Hstype') as [t2' [s'' Hstype'']].
+
+    exists (term_SEQ t1' t2'), s''.
+    by apply Hstype''.
 Defined.
 
 (* Testing the interpreter *)
