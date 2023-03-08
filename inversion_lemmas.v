@@ -215,59 +215,77 @@ Lemma term_SEQ_typing_inv : forall t t1 t2 t1s t2s,
   {t3s & typing t1 (Tf t1s t3s) /\ typing t2 (Tf t3s t2s)}.
 Proof.
   intros t t1 t2 t1s t2s Heqt Htype.
-  destruct (type_checker t1) as [t1s' t3s'].
-  destruct (type_checker t2) as [t3s'' t2s'].
+  destruct (type_checker t1) as [t1s' t1_t3s].
+  destruct (type_checker t2) as [t2_t3s t2s'].
+
+  (* note that t1_t3s is not necessarily equal to t2_t3s
+   * (one of them may have an extra prefix) *)
+  remember (length t2_t3s <=? length t1_t3s) as t1_t3s_longer.
+
+  (* we can use the outer type (t1s'/t2s')
+   * of the term with the longer 'inner' type (t1_t3s or t2_t3s)
+   * to find out what prefix (ts') we need to put on our t3s
+   * so that t1s/t2s match up with t1s'/t2s' *)
+
+  remember (if t1_t3s_longer then t1s else t2s) as outer_type_expected.
+  remember (if t1_t3s_longer then t1s' else t2s') as outer_type_minimal.
+  remember (length outer_type_expected - length outer_type_minimal) as ts'_len.
+  remember (firstn ts'_len outer_type_expected) as ts'.
+  remember (if t1_t3s_longer then t1_t3s else t2_t3s) as longer_inner_type.
+  exists (ts' ++ longer_inner_type).
+
+  subst t.
+  destruct t1_t3s_longer; subst longer_inner_type.
+  - (* t1_t3s longer than t2_t3s *)
+    dependent induction Htype => //.
+    * (* weakening case *)
+      give_up.
+      (* eapply IHHtype. *)
+      (* the IH here seems useless - it requires
+       * t1s = t1s0, t2s = t2s0
+       * is it maybe the case that ts = [] always? *)
+    * (* composition case *)
+      (* need to show ts' = [] *)
+      subst outer_type_expected outer_type_minimal.
+      (* assert (Ht1s : t1s = t1s'). { give_up. } *)
+      assert (Hts' : ts' = []). { give_up. }
+      rewrite Hts'. simpl.
+      give_up.
+
 
   (* NOTE:
-   * t1s  = t1s'  (modulo some prefix)
-   * t2s  = t2s'  (modulo some prefix)
-   * t3s' = t3s'' (modulo some prefix) *)
-
-  (* is it the case that either t3s' or t3s'' is always longer or equal len?
-   * no:
-   *
-   * i_add
-   *  : ii  -> i
-   *  : iii -> ii (weakened)
-   * i_add;i_add
-   *  : iii -> i (as it's a composition of iii -> ii and ii -> i)
-   * note it's a composition of iii -> ii and ii -> i,
-   * but the minimal types are ii -> i and ii -> i (so t3s' < t3s'')
-   *
-   * i_dupe
-   *  : i  -> ii
-   *  : ii -> iii (weakened)
-   * i_dupe;i_dupe
-   *  : i  -> iii (as it's a composition of i -> ii and ii -> iii)
-   * note it's a composition of i -> ii and ii -> iii
-   * but the minimal types are i -> ii and i -> ii (so t3s' > t3s'') *)
+   * t1s    = t1s'   (modulo some prefix)
+   * t2s    = t2s'   (modulo some prefix)
+   * t1_t3s = t2_t3s (modulo some prefix) *)
 
   (* so we need to consider the two cases where
-   * either t3s' is longer or t3s'' is longer:
+   * either t1_t3s is longer or t2_t3s is longer:
    *
-   * - ts + t3s' = t3s'' (t3s' shorter than t3s'')
+   * - ts + t1_t3s = t2_t3s (t1_t3s shorter than t2_t3s)
    *
    *   so we can make the 'middle' types line up
    *   by weakening the left function type:
-   *   (Tf (ts + t1s') (ts + t3s')) . (Tf t3s'' t2s')
+   *   (Tf (ts + t1s') (ts + t1_t3s)) . (Tf t2_t3s t2s')
    *
    *   so the minimal type for the composition is
    *   Tf (ts + t1s') t2s'
    *
    *   however, we may be dealing with a weakened version of that:
    *   Tf (ts' + ts + t1s') (ts' + t2s')
+   *   and so the t3s we need is (ts' + t2_t3s)
    *
-   * - t3s' = ts + t3s'' (t3s' longer than t3s'')
+   * - t1_t3s = ts + t2_t3s (t1_t3s longer than t2_t3s)
    *
    *   so we can make the 'middle' types line up
    *   by weakening the right function type:
-   *   (Tf t1s' t3s') . (Tf (ts + t3s'') (ts + t2s'))
+   *   (Tf t1s' t1_t3s) . (Tf (ts + t2_t3s) (ts + t2s'))
    *
    *   so the minimal type for the composition is
    *   Tf t1s' (ts + t2s')
    *
    *   however, we may be dealing with a weakened version of that:
    *   Tf (ts' + t1s') (ts' + ts + t2s')
+   *   and so the t3s we need is (ts' + t1_t3s)
    *
    *
    *   so we have:
@@ -275,11 +293,9 @@ Proof.
    *     t1s = ts' + ts + t1s' /\ t2s = ts' + t2s' \/
    *     t1s = ts' + t1s' /\ t2s = ts' + ts + t2s'
    *   (and we can tell in which \/ branch we are based on lengths of
-   *   t3s'/t3s'')
+   *   t1_t3s/t2_t3s)
    *
    *)
-
-  exists t3s.
 
   (* XXX need type checker correctness proof here *)
   (* XXX need to use the fact that the type checker's result is the
