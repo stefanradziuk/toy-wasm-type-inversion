@@ -113,34 +113,6 @@ Proof.
   destruct v; inversion Hvtype. exists f. reflexivity.
 Qed.
 
-(* XXX is this not provable as sigma type?
-Lemma value_typing_inversion_i32 : forall v,
-  value_typing v t_i32 -> {n & v = val_i32 n}.
-Proof.
-  intros v Hvtype.
-  destruct v as [n|].
-  - exists n. reflexivity.
-  - Fail induction Hvtype.
-Admitted. *)
-
-(* XXX unused now?
-Lemma term_const_typing_inv : forall t v vt t1s t2s,
-  t = (term_const v) ->
-  value_typing v vt ->
-  typing t (Tf t1s t2s) ->
-  {ts & t1s = ts /\ t2s = ts ++ [vt]}.
-Proof.
-  intros t v vt t1s t2s Hterm Hvtype Htype.
-  subst t.
-  exists t1s; split => //.
-  dependent induction Htype.
-  - assert (Heqvt : vt0 = vt).
-    { by apply (value_typing_deterministic v _ _ H Hvtype). }
-    rewrite Heqvt. reflexivity.
-  - rewrite <- app_assoc; f_equal.
-    by apply (IHHtype _ _ _ Hvtype); reflexivity.
-Qed. *)
-
 Lemma term_const_typing_inv : forall t v t1s t2s,
   t = (term_const v) ->
   typing t (Tf t1s t2s) ->
@@ -244,8 +216,81 @@ Lemma term_SEQ_typing_inv : forall t t1 t2 t1s t2s,
 Proof.
   intros t t1 t2 t1s t2s Heqt Htype.
   destruct (type_checker t1) as [t1s' t3s'].
-  destruct (type_checker t2) as [t2s' t3s''].
+  destruct (type_checker t2) as [t3s'' t2s'].
+
+  (* NOTE:
+   * t1s  = t1s'  (modulo some prefix)
+   * t2s  = t2s'  (modulo some prefix)
+   * t3s' = t3s'' (modulo some prefix) *)
+
+  (* is it the case that either t3s' or t3s'' is always longer or equal len?
+   * no:
+   *
+   * i_add
+   *  : ii  -> i
+   *  : iii -> ii (weakened)
+   * i_add;i_add
+   *  : iii -> i (as it's a composition of iii -> ii and ii -> i)
+   * note it's a composition of iii -> ii and ii -> i,
+   * but the minimal types are ii -> i and ii -> i (so t3s' < t3s'')
+   *
+   * i_dupe
+   *  : i  -> ii
+   *  : ii -> iii (weakened)
+   * i_dupe;i_dupe
+   *  : i  -> iii (as it's a composition of i -> ii and ii -> iii)
+   * note it's a composition of i -> ii and ii -> iii
+   * but the minimal types are i -> ii and i -> ii (so t3s' > t3s'') *)
+
+  (* so we need to consider the two cases where
+   * either t3s' is longer or t3s'' is longer:
+   *
+   * - ts + t3s' = t3s'' (t3s' shorter than t3s'')
+   *
+   *   so we can make the 'middle' types line up
+   *   by weakening the left function type:
+   *   (Tf (ts + t1s') (ts + t3s')) . (Tf t3s'' t2s')
+   *
+   *   so the minimal type for the composition is
+   *   Tf (ts + t1s') t2s'
+   *
+   *   however, we may be dealing with a weakened version of that:
+   *   Tf (ts' + ts + t1s') (ts' + t2s')
+   *
+   * - t3s' = ts + t3s'' (t3s' longer than t3s'')
+   *
+   *   so we can make the 'middle' types line up
+   *   by weakening the right function type:
+   *   (Tf t1s' t3s') . (Tf (ts + t3s'') (ts + t2s'))
+   *
+   *   so the minimal type for the composition is
+   *   Tf t1s' (ts + t2s')
+   *
+   *   however, we may be dealing with a weakened version of that:
+   *   Tf (ts' + t1s') (ts' + ts + t2s')
+   *
+   *
+   *   so we have:
+   *   exists ts ts',
+   *     t1s = ts' + ts + t1s' /\ t2s = ts' + t2s' \/
+   *     t1s = ts' + t1s' /\ t2s = ts' + ts + t2s'
+   *   (and we can tell in which \/ branch we are based on lengths of
+   *   t3s'/t3s'')
+   *
+   *)
+
+  exists t3s.
+
   (* XXX need type checker correctness proof here *)
+  (* XXX need to use the fact that the type checker's result is the
+   * smallest/'strongest' possible type (?) *)
+  (* XXX what is needed to show that t3s' = t3s'' (modulo a prefix on either)
+   * may be able to use the internals of the type checker somehow? *)
+  (* actually probably can just invert Htype for that,
+   * it can be inverted once the goal is a Prop
+   * (i.e. once we provide a value for t3s)
+   *)
+
 Admitted.
 
 (* The value stack *)
@@ -273,7 +318,7 @@ Lemma rcons_stack_typing_inv : forall s st t vt,
 Proof.
   intros s st t tt.
   induction s.
-  (* TODO this is admitted but is not used for extraction *)
+  (* TODO this is admitted but is not used in extracted code *)
 Admitted.
 
 Lemma stack_typing_length : forall s st,
@@ -300,12 +345,6 @@ Proof.
   - exists s', t. apply rcons_stack_typing_inv in Hstype as [Hstype Hvtype].
     repeat split; by assumption.
 Qed.
-
-(* XXX no longer necessary? *)
-Lemma cat_stack_typing_inv : forall s st1 st2,
-  stack_typing s (st1 ++ st2) ->
-  {s1 & {s2 & s = s1 ++ s2 /\ stack_typing s1 st1 /\ stack_typing s2 st2}}.
-Proof. Admitted.
 
 (* Note: the stack given to the interpreter
  * must contain the right type values *)
