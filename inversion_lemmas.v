@@ -449,3 +449,6 @@ Extraction "interpret.hs"
   typing_term_addi32
   stack_2_6_typing
 .
+
+(* NOTE: extracting typing_term_addi32 is redundant -- it only generates a
+ * comment (and incorrectly) *)
