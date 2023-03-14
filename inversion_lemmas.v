@@ -416,24 +416,33 @@ Defined.
 
 (* Testing the interpreter *)
 
-Definition stack_2_6 : stack := [val_i32 2; val_i32 6].
-Definition t_in : list value_type := [t_i32; t_i32].
+(* TODO replace term_SEQ with lists -- closer to wasmcert and easier to use *)
+Definition term_add_2_6 : term :=
+  term_SEQ
+    (term_SEQ (term_const (val_i32 2)) (term_const (val_i32 6)))
+    term_addi32.
+Definition stack_emp : stack := [].
+Definition t_in : list value_type := [].
 Definition t_out : list value_type := [t_i32].
 
-Lemma stack_2_6_typing : stack_typing stack_2_6 t_in.
+Definition term_add_2_6_typing : typing term_add_2_6 (Tf [] [t_i32]).
 Proof.
-  repeat apply stack_typing_cons; try apply vt.
-  by apply stack_typing_nil.
+  apply typing_composition with (t3s := [t_i32; t_i32]).
+  - apply typing_composition with (t3s := [t_i32]).
+    * apply typing_term_const. by apply vt.
+    * apply typing_weaken with (ts := [t_i32]).
+      apply typing_term_const. by apply vt.
+  - by apply typing_term_addi32.
 Qed.
 
-Compute (
+Check (
   interpret_one_step
-  term_addi32
+  term_add_2_6
   t_in
   t_out
-  stack_2_6
-  typing_term_addi32
-  stack_2_6_typing
+  stack_emp
+  term_add_2_6_typing
+  stack_typing_nil
 ).
 
 (* Extraction *)
@@ -442,13 +451,11 @@ From Coq Require Import Extraction.
 Extraction Language Haskell.
 Extraction "interpret.hs"
   interpret_one_step
-  term_addi32
+  term_add_2_6
   t_in
   t_out
-  stack_2_6
-  typing_term_addi32
-  stack_2_6_typing
+  stack_emp
 .
 
-(* NOTE: extracting typing_term_addi32 is redundant -- it only generates a
- * comment (and incorrectly) *)
+(* NOTE: we don't even need to extract stack_typing_nil and term_add_2_6_typing *)
+
