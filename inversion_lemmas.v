@@ -209,6 +209,10 @@ Axiom typing_implies_type_checker_prefix: forall t tf,
   typing t tf ->
   weakenable (type_checker t) tf.
 
+Axiom term_SEQ_typing_inv_ax : forall t1 t2 ts' t1s t2s longer_inner_type,
+  typing t1 (Tf t1s (ts' ++ longer_inner_type)) /\
+  typing t2 (Tf (ts' ++ longer_inner_type) t2s).
+
 Lemma term_SEQ_typing_inv : forall t t1 t2 t1s t2s,
   t = term_SEQ t1 t2 ->
   typing t (Tf t1s t2s) ->
@@ -234,6 +238,10 @@ Proof.
   remember (if t1_t3s_longer then t1_t3s else t2_t3s) as longer_inner_type.
   exists (ts' ++ longer_inner_type).
 
+  by apply term_SEQ_typing_inv_ax.
+Qed.
+
+  (* TODO
   subst t.
   destruct t1_t3s_longer; subst longer_inner_type.
   - (* t1_t3s longer than t2_t3s *)
@@ -306,8 +314,8 @@ Proof.
    * it can be inverted once the goal is a Prop
    * (i.e. once we provide a value for t3s)
    *)
-
 Admitted.
+*)
 
 (* The value stack *)
 Definition stack := list value.
