@@ -370,17 +370,20 @@ Proof.
     repeat split; by assumption.
 Qed.
 
+(* TODO rename terms as e *)
 (* Note: the stack given to the interpreter
  * must contain the right type values *)
 Fixpoint interpret_one_step
-  t tf_in tf_out s
-  (Htype : typing t (Tf tf_in tf_out)) (Hstype : stack_typing s tf_in)
-  : {t' : term & {s' : stack & stack_typing s' tf_out}}.
+  t s
+  (* TODO should get rid of Hstype and do it the way wasmcert does *)
+  (Htype_Hstype : exists tf_in tf_out, typing t (Tf tf_in tf_out) /\ stack_typing s tf_in)
+  : {t' : term & {s' : stack & exists tf_out, stack_typing s' tf_out}}.
 Proof.
   destruct t as [| |t1 t2] eqn:Heqt.
 
   - (* term_const *)
-    (* TODO need to consume evaluated instrs - noop instr? *)
+    (* TODO need to consume evaluated instrs - noop instr?
+     * probably easiest to switch to lists *)
     exists t, (s ++ [v]).
     rewrite <- Heqt in Htype.
     destruct (term_const_typing_inv t v tf_in tf_out Heqt Htype) as [tf_in' [? Htf_out]].
